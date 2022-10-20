@@ -189,6 +189,100 @@ def offset(cls, dt: datetime.datetime): return cls.offset(dt.astimezone()) if dt
 -----------------------------------------------------------------------
 
 
+コード|意味
+------|----
+`astimezone()`|システムのタイムゾーン時に変換する
+`astimezone(tz=datetime.timezone.utc)`|UTC標準時に変換する
+
+日付データ|タイムゾーン確定是非|解析パターン
+----------|--------------------|------------
+`datetime(tz=None)`|❌|`astimezone(tzinfo=Noneならローカル時刻、utcならUTC)`
+`datetime(tz=utc)`|⭕|UTC標準時
+`datetime(tz=ZoneInfo('Asia/Tokyo'))`|⭕|東京`+09:00`。ただし実行環境の地方名を取得する手段なし
+`'2000-01-01 00:00:00'`|❌|上記と同じ
+`'2000-01-01T00:00:00Z'`|△|`fromisoformat()`に渡す前に`Z`を`+00:00`に変換する必要がある。本来は`+00:00`で確定してた
+`'2000-01-01T00:00:00+09:00'`|⭕|
+
+```python
+def is_native(cls, dt: datetime.datetime): return dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None
+def is_aware(cls, dt: datetime.datetime): return not cls.is_native(dt)
+def to_utc(cls, dt: datetime.datetime): return dt.astimezone(tz=datetime.timezone.utc)
+def to_local(cls, dt: datetime.datetime): return dt.astimezone()
+def to_tz(cls, dt: datetime.datetime, tz=None): return dt.astimezone(tz=tz)
+def if_native_to_local(cls, dt: datetime.datetime): return cls.to_local(dt) if cls.is_native(dt) else dt
+def if_native_to_utc(cls, dt: datetime.datetime): return cls.to_utc(dt) if cls.is_native(dt) else dt
+```
+
+```python
+nowu = datetime.datetime.now(tz=datetime.timezone.utc)
+nowu
+nowu.astimezone()
+nowu
+```
+
+* タイムゾーン
+	* UTC: `to_utc()`
+	* 実行環境の現地時間: `to_local()`
+	* 指定した特定のタイムゾーン(時間も変わる): `to_tz()`
+
+```python
+class SQLiteDateTime: # 'yyy-MM-dd HH:mm:ss'形式 UTC標準時
+```
+```python
+def from_datetime(cls, dt: datetime.datetime)->str:
+	utc = AwareDateTime.to_utc(AwareDateTime.to_local(dt) if AwareDateTime.is_native(dt) else dt)
+	return f"{utc:%Y-%m-%d %H:%M:%S}"
+def to_datetime(cls, s:str)->datetime.datetime:
+    if re.fullmatch(r'\d{4,}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', s):
+        return datetime.datetime.fromisoformat(s.replace(' ', 'T') + '+00:00')
+    else: raise Error("書式エラーです。'yyyy-MM-dd HH:mm:ss' の書式にしてください。")
+```
+
+
+
+
+```python
+def from_ymdhms(cls, s: str)->datetime.datetime:
+	cls._from_pattern(r'\d{4,}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', s).
+	return cls._from_ymdhms(s, AwareDateTime.native_tz_iso())
+
+	if AwareDateTime.is_native(dt):
+		utc = AwareDateTime.to_utc(AwareDateTime.to_local(dt))
+		return f"{utc:%Y-%m-%d %H:%M:%S}"
+	else:
+
+def _from_pattern(cls, p:str, s:str, tz:str)->datetime.datetime:
+    if re.fullmatch(p, s): return s
+    else: raise Error("書式エラーです。次の書式に従ってください。: {p}")
+def _from_ymdhms(cls, s: str, tz)->datetime.datetime:
+    if re.fullmatch(r'\d{4,}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', s):
+        return datetime.datetime.fromisoformat(s.replace(' ', 'T') + tz)
+    else: raise Error("書式エラーです。'yyyy-MM-dd HH:mm:ss' の書式にしてください。")
+def from_ymdhms(cls, s: str)->datetime.datetime: return cls._from_ymdhms(s, AwareDateTime.native_tz_iso())
+def from_iso(cls, s: str)->datetime.datetime: return AwareDateTime.to_native(datetime.datetime.fromisoformat(s))
+
+def from_iso(cls, s:str)
+def from_ymdhms(cls, s:str)
+def from_datetime(cls, dt: datetime.datetime)->datetime.datetime: return AwareDateTime.to_native(dt)
+
+```
+
+```python
+def _from_ymdhms(cls, s: str, tz)->datetime.datetime:
+    if re.fullmatch(r'\d{4,}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', s):
+        return datetime.datetime.fromisoformat(s.replace(' ', 'T') + tz)
+    else: raise Error("書式エラーです。'yyyy-MM-dd HH:mm:ss' の書式にしてください。")
+def from_ymdhms(cls, s: str)->datetime.datetime: return cls._from_ymdhms(s, AwareDateTime.native_tz_iso())
+def from_iso(cls, s: str)->datetime.datetime: return AwareDateTime.to_native(datetime.datetime.fromisoformat(s))
+
+def from_iso(cls, s:str)
+def from_ymdhms(cls, s:str)
+def from_datetime(cls, dt: datetime.datetime)->datetime.datetime: return AwareDateTime.to_native(dt)
+
+```
+-----------------------------------------------------------------------
+
+
 
 
 
