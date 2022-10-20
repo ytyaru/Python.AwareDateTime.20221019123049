@@ -5,7 +5,7 @@ class AwareDateTime:
     @classmethod # nativeならawareなUTC標準時に変換して返す
     def to_aware(cls, dt: datetime.datetime): return dt if cls.is_aware(dt) else dt.astimezone(tz=datetime.timezone.utc)
     @classmethod # awareならnativeに変換して返す
-    def to_native(cls, dt: datetime.datetime, tz=None): # タイムゾーンを付与したawareなローカル時刻にする(tzinfo=Noneでなく)
+    def to_native(cls, dt: datetime.datetime): # タイムゾーンを付与したawareなローカル時刻にする(tzinfo=Noneでなく)
         dt2 = cls.to_utc(dt) + (datetime.timedelta(seconds=cls.native_tz()) * -1)
         return datetime.datetime.fromisoformat(f"{dt2:%Y-%m-%dT%H:%M:%S}{cls.native_tz_iso()}")
     @classmethod # nativeならawareなUTC標準時に変換して返す
