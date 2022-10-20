@@ -8,6 +8,8 @@ import os
 class TestAwareDateTime(unittest.TestCase):
     def setUp(self): pass
     def tearDown(self): pass
+    def test_default_native_tz(self):
+        self.assertEqual(zoneinfo.ZoneInfo('Asia/Tokyo'), AwareDateTime.default_native_tz())
     def test_is_aware_true(self):
         self.assertTrue(AwareDateTime.is_aware(datetime.datetime.now(datetime.timezone.utc)))
     def test_is_aware_false(self):
@@ -27,21 +29,11 @@ class TestAwareDateTime(unittest.TestCase):
     def test_to_native_from_aware_as(self):
         dt = datetime.datetime.fromisoformat('2000-01-01T00:00:00+00:00')
         self.assertEqual(datetime.timezone.utc, dt.tzinfo)
-        #self.assertEqual(None, AwareDateTime.to_native(dt).tzinfo)
-        if 32400 == AwareDateTime.offset(datetime.datetime.now()):
-            self.assertEqual(datetime.timezone(datetime.timedelta(seconds=32400)), AwareDateTime.to_native(dt).tzinfo)
-            self.assertEqual(15, AwareDateTime.to_native(dt).hour)
-            self.assertEqual(0, AwareDateTime.to_native(dt).minute)
-            self.assertEqual(0, AwareDateTime.to_native(dt).second)
-            self.assertEqual(31, AwareDateTime.to_native(dt).day)
-            self.assertEqual(12, AwareDateTime.to_native(dt).month)
-            self.assertEqual(1999, AwareDateTime.to_native(dt).year)
+        self.assertEqual(None, AwareDateTime.to_native(dt).tzinfo)
     def test_to_native_from_aware_as_tokyo(self):
         dt = datetime.datetime.fromisoformat('2000-01-01T00:00:00+09:00')
         self.assertEqual(datetime.timezone(datetime.timedelta(seconds=32400)), dt.tzinfo)
-        #self.assertEqual(None, AwareDateTime.to_native(dt).tzinfo)
-        if 32400 == AwareDateTime.offset(datetime.datetime.now()):
-            self.assertEqual(datetime.timezone(datetime.timedelta(seconds=32400)), AwareDateTime.to_native(dt).tzinfo)
+        self.assertEqual(None, AwareDateTime.to_native(dt).tzinfo)
     def test_to_utc(self):
         dt = datetime.datetime.fromisoformat('2000-01-01T00:00:00')
         self.assertEqual(None, dt.tzinfo)
