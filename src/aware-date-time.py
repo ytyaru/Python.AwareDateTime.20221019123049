@@ -18,6 +18,7 @@ class AwareDateTime:
     def if_native_to_tz(cls, dt: datetime.datetime, tz): return cls.to_tz(dt, tz) if cls.is_native(dt) else dt
     @classmethod # UTC標準時からの時差を返す（指定した日時のタイムゾーンを秒数で返す）
     def tz_sec(cls, dt: datetime.datetime): return cls.tz_sec(dt.astimezone()) if cls.is_native(dt) else dt.tzinfo.utcoffset(dt).seconds
+    @classmethod # UTC標準時からの時差を返す（指定した日時のタイムゾーンを+00:00テキストで返す）
     def tz_iso(cls, dt: datetime.datetime):
         seconds = cls.tz_sec(dt)
         minutes = seconds // 60
