@@ -1,6 +1,6 @@
-タイムゾーン無しにタイムゾーンを付ける【Python】
+タイムゾーンがない日時にタイムゾーンを付ける【Python】
 
-　`aware`/`native`とかいうクソ概念をぶち殺す！
+　`aware`/`native`とかややこしいので、タイムゾーンをつけるクラスを作った。
 
 <!-- more -->
 
@@ -25,40 +25,33 @@ cd $NAME/src
 ```python
 import datetime
 class AwareDateTime:
+    @classmethod # タイムゾーン付きでないか否か
+    def is_native(cls, dt: datetime.datetime): return dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None
     @classmethod # タイムゾーン付きであるか否か
-    def is_aware(cls, dt: datetime.datetime): return dt.tzinfo is not None and dt.tzinfo.utcoffset(dt) is not None
-    @classmethod # nativeならawareなUTC標準時に変換して返す
-    def to_aware(cls, dt: datetime.datetime): return dt if cls.is_aware(dt) else dt.astimezone(tz=datetime.timezone.utc)
-    @classmethod # awareならnativeに変換して返す
-    def to_native(cls, dt: datetime.datetime, tz=None): # タイムゾーンを付与したawareなローカル時刻にする(tzinfo=Noneでなく)
-        dt2 = cls.to_utc(dt) + (datetime.timedelta(seconds=cls.native_tz()) * -1)
-        return datetime.datetime.fromisoformat(f"{dt2:%Y-%m-%dT%H:%M:%S}{cls.native_tz_iso()}")
-    @classmethod # nativeならawareなUTC標準時に変換して返す
+    def is_aware(cls, dt: datetime.datetime): return not cls.is_native(dt)
+    @classmethod # UTC標準時に変換する
     def to_utc(cls, dt: datetime.datetime): return dt.astimezone(tz=datetime.timezone.utc)
-    @classmethod # UTC標準時との時差を秒単位で返す
-    def offset(cls, dt: datetime.datetime): return cls.offset(dt.astimezone()) if dt.tzinfo is None else dt.tzinfo.utcoffset(dt).seconds
-    @classmethod # システムのタイムゾーンを秒数で返す
-    def native_tz(cls): return cls.offset(datetime.datetime.now())
-    @classmethod # 指定した秒数をISO-8601形式のタイムゾーンで返す
-    def tz_iso(cls, seconds):
-        minutes = seconds // 60
-        h = minutes // 60
-        m = minutes - (h * 60)
-        s = seconds % 60
-        return f"{'+' if 0 <= seconds else '-'}{h:02}:{m:02}{'' if 0 == s else ':'+str(s).zfill(2)}"
-    @classmethod # システムのタイムゾーンをISO8601形式で返す
-    def native_tz_iso(cls): return cls.tz_iso(cls.offset(datetime.datetime.now()))
-    @classmethod # awareでUTC標準時な現在日時を返す
-    def now(cls): return datetime.datetime.now(datetime.timezone.utc)
-    @classmethod  # return:'yyyy-MM-ddTHH:mm:ssZ' UTC標準時
-    def from_isoz(cls, s: str): return datetime.datetime.fromisoformat(s.replace('Z', '+00:00'))
-    @classmethod # s='yyyy-MM-ddTHH:mm:ssZ' UTC標準時
-    def to_isoz(cls, dt: datetime.datetime): return f"{cls.to_utc(dt):%Y-%m-%dT%H:%M:%SZ}"
-    @classmethod # s='yyyy-MM-dd HH:mm:ss' + UTC標準時
-    def from_sqlite(cls, s: str): return datetime.datetime.fromisoformat(s.replace(' ', 'T') + '+00:00')
-    @classmethod # return:'yyyy-MM-dd HH:mm:ss' + UTC標準時
-    def to_sqlite(cls, dt: datetime.datetime): return f"{cls.to_utc(dt):%Y-%m-%d %H:%M:%S}"
+    @classmethod # システムのローカル時に変換する
+    def to_local(cls, dt: datetime.datetime): return dt.astimezone()
+    @classmethod # 指定したタイムゾーン時に変換する
+    def to_tz(cls, dt: datetime.datetime, tz): return dt.astimezone(tz=tz)
+    @classmethod # タイムゾーンがないならシステムのローカル時に変換する
+    def if_native_to_local(cls, dt: datetime.datetime): return cls.to_local(dt) if cls.is_native(dt) else dt
+    @classmethod # タイムゾーンがないならUTC標準時に変換する
+    def if_native_to_utc(cls, dt: datetime.datetime): return cls.to_utc(dt) if cls.is_native(dt) else dt
+    @classmethod # 指定したタイムゾーン時に変換する。ネイティブならローカル時刻と解釈する
+    def if_native_to_tz(cls, dt: datetime.datetime, tz): return cls.to_tz(dt, tz) if cls.is_native(dt) else dt
 ```
+
+　欲しかったのは`if_native_to_local`。
+
+メソッド|概要
+--------|----
+`if_native_to_local`|タイムゾーンがないときローカルのタイムゾーンとして解釈した日付型を返す
+`if_native_to_utc`|タイムゾーンがないときUTCとして解釈した日付型を返す
+`if_native_to_tz`|タイムゾーンがないとき指定したタイムゾーンとして解釈した日付型を返す
+
+　`if_native_*`でない`to_*`系は強制的に変換する。でもタイムゾーンがある場合はそのまま使いたい場合もある。問題なのはタイムゾーンがない場合なので、それだけ変換するのが`if_native_*`系。
 
 # 日時の基礎
 
@@ -73,21 +66,33 @@ class AwareDateTime:
 `aware`|タイムゾーンがある日付型インスタンス
 `native`|タイムゾーンがない日付型インスタンス
 
-　は？　ってなる。
+## 謎
 
-## `aware`/`native`とかいうクソ概念
+　なぜ`native`なタイムゾーンなんてあるのかわからない。
 
-　`aware`/`native`の2種類があるせいで日付処理の複雑さが爆上がる。タイムゾーンは`tzinfo`で取得できるが`native`な日付型は`tzinfo`が`None`になる。PythonはNULL安全でないレガシー言語なので`None`とそうでない場合の条件分岐が大変。クソにクソが上塗りされてクソコードになる。
-
-　というわけで`aware`/`native`の区別がない世界にしたい。すべての日付型はタイムゾーンをもっているようにしたい。今回はそれを実装した。
+　`native`（タイムゾーンがない日時型）があるせいでややこしくなる。私としてはタイムゾーンがないときは実行環境のタイムゾーンを付与して欲しかった。実際には`tzinfo`が`None`になる。なのに`astimezone()`では実行環境のタイムゾーンで計算されてそれを付与した日付型が返される。なんだかチグハグな印象。なぜ`native`なんて日付型があるのかわからない。
 
 ## Pythonの[datetime][]を確認する
 
 ```python
 import datetime
+```
+
+aware
+```python
 aware = datetime.datetime.fromisoformat('2000-01-01T00:00:00+00:00')
-native = datetime.datetime.fromisoformat('2000-01-01T00:00:00')
 assert aware.tzinfo == datetime.timezone.utc
+
+aware = datetime.datetime.now(datetime.timezone.utc)
+assert aware.tzinfo == datetime.timezone.utc
+```
+
+native
+```python
+native = datetime.datetime.fromisoformat('2000-01-01T00:00:00')
+assert native.tzinfo == None
+
+native = datetime.datetime.now()
 assert native.tzinfo == None
 ```
 
@@ -95,7 +100,7 @@ assert native.tzinfo == None
 
 　タイムゾーンがないときは`tzinfo`が`None`になる。これをなくして実行環境に応じたタイムゾーンを付与したい。
 
-　システムのタイムゾーン情報を取得する方法は以下。ネイティブ日時を`astimezone()`する。私の実行環境である日本`"Asia/Tokyo"`なら`+09:00`。秒で表すと`32400`。名前は`JST`。
+　システムのタイムゾーン情報を取得する方法は以下。ネイティブ日時を`astimezone()`する。私の実行環境である日本`"Asia/Tokyo"`なら`+09:00`。秒で表すと`32400`。名前は`JST`。型は`timezone(timedelta)`。
 
 ```python
 native.astimezone()
@@ -128,7 +133,7 @@ native.astimezone().tzinfo.utcoffset(native).seconds #=>32400
 
 　[datetime][]の`astimezone()`や`utcoffset()`を使うことでシステムのタイムゾーンを取得できた。あとはこれをセットした日付インスタンスを生成すればいい。けど、そこが難関。
 
-　`astimezone()`には`tzinfo`が引数にある。なので取得した`32400`をここで指定できれば万事解決していた。が、残念ながら以下エラーが出る。なんでや！
+　`astimezone()`には`tzinfo`が引数にある。なので取得した`32400`をここで指定できれば万事解決していた。が、残念ながら以下エラーが出る。
 
 ```python
 native.astimezone(32400)
@@ -144,195 +149,15 @@ TypeError: tzinfo argument must be None or of a tzinfo subclass, not type 'int'
 `None`|`aware`でなく`native`な日付になる。タイムゾーン情報がない。こいつを消す方法はよ
 `datetime.timezone.utc`|UTC標準時
 `zoneinfo.ZoneInfo('Asia/Tokyo')`|`+09:00`（Python3.9以降）
+`datetime.datetime.now().astimezone().tzinfo`|ローカルのタイムゾーン
 
-　この方法には致命的な問題がある。実行環境のタイムゾーンが取得できないことだ。
+　こんなパターンやコードを覚えられるわけがない。長いし深い。
 
-　世界中のどこかで実行したとき、それぞれの地域に応じたタイムゾーンを取得したい。その問題を解決する方法がどこにもない。`None`はそもそもタイムゾーンがないし、`utc`はUTC標準時`+00:00`。`Asia/Tokyo`とかいう地域名のテキストは実行マシンごとに自分の地域名を取得できれば解決するのだが、そんな方法はどこにもないっぽい。そんなバカな……。
-
-　というわけで、自分で工夫して作るしかなかった。
-
-　先ほど取得したシステムのタイムゾーン（UTC標準時との時差`32400`秒）をうまいこと利用してタイムゾーンがない日付にそのシステムのタイムゾーンをセットしてやりたい。それが今回実装した`to_native(dt)`メソッド。
-
-## nativeな日付にタイムゾーンをつける
-
-```python
-def to_native(cls, dt: datetime.datetime, tz=None):
-    dt2 = cls.to_utc(dt) + (datetime.timedelta(seconds=cls.native_tz()) * -1)
-    return datetime.datetime.fromisoformat(f"{dt2:%Y-%m-%dT%H:%M:%S}{cls.native_tz_iso()}")
-```
-
-　`to_native`の`native`はタイムゾーンがない日付のことではなく、単に現地時間のこと。もちろんタイムゾーン付き。ふつうはそう思うはず。私はそう思う。なので紛らわしいが`native`の名前を使った。
-
-　`to_native()`は以下のようなメソッドを呼び出している。
-
-```python
-def to_utc(cls, dt: datetime.datetime): return dt.astimezone(tz=datetime.timezone.utc)
-def native_tz(cls): return cls.offset(datetime.datetime.now())
-def native_tz_iso(cls): return cls.tz_iso(cls.offset(datetime.datetime.now()))
-def offset(cls, dt: datetime.datetime): return cls.offset(dt.astimezone()) if dt.tzinfo is None else dt.tzinfo.utcoffset(dt).seconds
-```
-
-　UTC標準時からの時差が取得できるので、それを起点にして頑張った。まず渡された日付をUTC日時に変換する。そこからシステムのタイムゾーン時差分だけ引く。その日付の年月日時分秒とシステムのタイムゾーン時差をISO8601形式にして`datetime.fromisoformat()`で日付型インスタンスを生成した。日付の計算はすべてPythonで実装済みのものを使うよう小細工を弄した。
-
-# タイムゾーンがない`native`時刻が何のためにあるのかわからない
-
-　`aware`だけでいいと思う。もう哀れとしか読めない。`native`は一体だれのためにあるのか理解できない。そのくせ内部では`astimezone()`でちゃんと計算できている様子。タイムゾーンの`tzinfo`は`None`なのにどういうこと？　って思う。内部にタイムゾーンがあるから計算できるはず。なら最初からタイムゾーンを指定しないときは自分の地域のタイムゾーンを指定してほしかった。そうすれば今回自分で実装する必要なかったのに。
-
-# 時間ってなんだっけ？
-
-　きっと`native`の存在理由はある。何か複雑な事情があるのだろう。
-
-　時間はむずかしい。タイムゾーンだのサマータイムだの、時間というやつは政治の都合でコロコロ変えられてしまう面があるようだし。時間は絶対的なものでなく宗教みたいなものなのかもしれない。それともじつは地球の公転や自転の速さは微妙に変わったりしているのか？　時間とかいう概念がむずかしすぎる。
-
-　そんな細かいことどうでもいいのだけど、きっちり決めないと定義できないし。偉い人に頑張ってもらうしかない。もっとアホでも使える簡単なのにしてほしい。
-
------------------------------------------------------------------------
-
-
-コード|意味
-------|----
-`astimezone()`|システムのタイムゾーン時に変換する
-`astimezone(tz=datetime.timezone.utc)`|UTC標準時に変換する
-
-日付データ|タイムゾーン確定是非|解析パターン
-----------|--------------------|------------
-`datetime(tz=None)`|❌|`astimezone(tzinfo=Noneならローカル時刻、utcならUTC)`
-`datetime(tz=utc)`|⭕|UTC標準時
-`datetime(tz=ZoneInfo('Asia/Tokyo'))`|⭕|東京`+09:00`。ただし実行環境の地方名を取得する手段なし
-`'2000-01-01 00:00:00'`|❌|上記と同じ
-`'2000-01-01T00:00:00Z'`|△|`fromisoformat()`に渡す前に`Z`を`+00:00`に変換する必要がある。本来は`+00:00`で確定してた
-`'2000-01-01T00:00:00+09:00'`|⭕|
-
-```python
-def is_native(cls, dt: datetime.datetime): return dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None
-def is_aware(cls, dt: datetime.datetime): return not cls.is_native(dt)
-def to_utc(cls, dt: datetime.datetime): return dt.astimezone(tz=datetime.timezone.utc)
-def to_local(cls, dt: datetime.datetime): return dt.astimezone()
-def to_tz(cls, dt: datetime.datetime, tz=None): return dt.astimezone(tz=tz)
-def if_native_to_local(cls, dt: datetime.datetime): return cls.to_local(dt) if cls.is_native(dt) else dt
-def if_native_to_utc(cls, dt: datetime.datetime): return cls.to_utc(dt) if cls.is_native(dt) else dt
-```
-
-```python
-nowu = datetime.datetime.now(tz=datetime.timezone.utc)
-nowu
-nowu.astimezone()
-nowu
-```
-
-* タイムゾーン
-	* UTC: `to_utc()`
-	* 実行環境の現地時間: `to_local()`
-	* 指定した特定のタイムゾーン(時間も変わる): `to_tz()`
-
-```python
-class SQLiteDateTime: # 'yyy-MM-dd HH:mm:ss'形式 UTC標準時
-```
-```python
-def from_datetime(cls, dt: datetime.datetime)->str:
-	utc = AwareDateTime.to_utc(AwareDateTime.to_local(dt) if AwareDateTime.is_native(dt) else dt)
-	return f"{utc:%Y-%m-%d %H:%M:%S}"
-def to_datetime(cls, s:str)->datetime.datetime:
-    if re.fullmatch(r'\d{4,}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', s):
-        return datetime.datetime.fromisoformat(s.replace(' ', 'T') + '+00:00')
-    else: raise Error("書式エラーです。'yyyy-MM-dd HH:mm:ss' の書式にしてください。")
-```
-
-
-
-
-```python
-def from_ymdhms(cls, s: str)->datetime.datetime:
-	cls._from_pattern(r'\d{4,}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', s).
-	return cls._from_ymdhms(s, AwareDateTime.native_tz_iso())
-
-	if AwareDateTime.is_native(dt):
-		utc = AwareDateTime.to_utc(AwareDateTime.to_local(dt))
-		return f"{utc:%Y-%m-%d %H:%M:%S}"
-	else:
-
-def _from_pattern(cls, p:str, s:str, tz:str)->datetime.datetime:
-    if re.fullmatch(p, s): return s
-    else: raise Error("書式エラーです。次の書式に従ってください。: {p}")
-def _from_ymdhms(cls, s: str, tz)->datetime.datetime:
-    if re.fullmatch(r'\d{4,}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', s):
-        return datetime.datetime.fromisoformat(s.replace(' ', 'T') + tz)
-    else: raise Error("書式エラーです。'yyyy-MM-dd HH:mm:ss' の書式にしてください。")
-def from_ymdhms(cls, s: str)->datetime.datetime: return cls._from_ymdhms(s, AwareDateTime.native_tz_iso())
-def from_iso(cls, s: str)->datetime.datetime: return AwareDateTime.to_native(datetime.datetime.fromisoformat(s))
-
-def from_iso(cls, s:str)
-def from_ymdhms(cls, s:str)
-def from_datetime(cls, dt: datetime.datetime)->datetime.datetime: return AwareDateTime.to_native(dt)
-
-```
-
-```python
-def _from_ymdhms(cls, s: str, tz)->datetime.datetime:
-    if re.fullmatch(r'\d{4,}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}', s):
-        return datetime.datetime.fromisoformat(s.replace(' ', 'T') + tz)
-    else: raise Error("書式エラーです。'yyyy-MM-dd HH:mm:ss' の書式にしてください。")
-def from_ymdhms(cls, s: str)->datetime.datetime: return cls._from_ymdhms(s, AwareDateTime.native_tz_iso())
-def from_iso(cls, s: str)->datetime.datetime: return AwareDateTime.to_native(datetime.datetime.fromisoformat(s))
-
-def from_iso(cls, s:str)
-def from_ymdhms(cls, s:str)
-def from_datetime(cls, dt: datetime.datetime)->datetime.datetime: return AwareDateTime.to_native(dt)
-
-```
------------------------------------------------------------------------
-
-
-
-
-
-
-
-
-
-
-　だったらどうして最初からタイムゾーンを指定しないときは自分の地域のタイムゾーンを指定してほしいのだが。なぜ`None`にした？　たぶん手抜きしたのだろう。結局、自分で超頑張って調べて書かねばならなかった。
-
-
-
-
-
-dt.tzinfo.utcoffset(dt).seconds #=> 32400
-
-datetime.datetime.timezone.utcoffset(tokyo)
-
-
-
+　そもそも問題なのはタイムゾーンがない日付。こいつの対処は以下3パターンのはず。というか、ふつうはローカル日時として解釈するはず。ただ、SQLite3はUTCとして解釈する。なので一応全パターン網羅できるようにした。
 
 メソッド|概要
 --------|----
-`from_isoz(s)`|ISO-8601の末尾`Z`日時書式テキストから日付型インスタンスを返す
-`to_isoz(dt)`|日付型インスタンスからISO-8601の末尾`Z`日時書式テキストを返す
-
-メソッド|概要
---------|----
-`from_sqlite(s)`|`yyyy-MM-dd HH:mm:ss`形式テキストをUTC標準時として解釈し日付型インスタンスを返す
-`to_sqlite(dt)`|日付型インスタンスをUTC標準時にして`yyyy-MM-dd HH:mm:ss`形式テキストで返す
-
-
-```python
-def test_from_isoz(self):
-    actual = AwareDateTime.from_isoz('2000-01-01T00:00:00Z')
-    self.assertEqual(datetime.datetime.fromisoformat('2000-01-01T00:00:00+00:00'), actual)
-    self.assertEqual(datetime.timezone.utc, actual.tzinfo)
-def test_from_sqlite(self):
-    actual = AwareDateTime.from_sqlite('2000-01-01 00:00:00')
-    self.assertEqual(datetime.datetime.fromisoformat('2000-01-01T00:00:00+00:00'), actual)
-    self.assertEqual(datetime.timezone.utc, actual.tzinfo)
-def test_to_sqlite_from_utc(self):
-    actual = AwareDateTime.to_sqlite(datetime.datetime.fromisoformat('2000-01-01T00:00:00+00:00'))
-    self.assertEqual('2000-01-01 00:00:00', actual)
-def test_to_sqlite_from_tokyo_00(self):
-    actual = AwareDateTime.to_sqlite(datetime.datetime.fromisoformat('2000-01-01T00:00:00+09:00'))
-    self.assertEqual('1999-12-31 15:00:00', actual)
-def test_to_sqlite_from_tokyo_12(self):
-    actual = AwareDateTime.to_sqlite(datetime.datetime.fromisoformat('2000-01-01T12:00:00+09:00'))
-    self.assertEqual('2000-01-01 03:00:00', actual)
-```
-
+`if_native_to_local`|タイムゾーンがないときローカルのタイムゾーンとして解釈した日付型を返す
+`if_native_to_utc`|タイムゾーンがないときUTCとして解釈した日付型を返す
+`if_native_to_tz`|タイムゾーンがないとき指定したタイムゾーンとして解釈した日付型を返す
 

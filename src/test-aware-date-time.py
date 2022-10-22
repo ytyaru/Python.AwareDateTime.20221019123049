@@ -12,13 +12,16 @@ class TestAwareDateTime(unittest.TestCase):
         self.assertTrue(AwareDateTime.is_native(datetime.datetime.now()))
     def test_is_native_false(self):
         self.assertFalse(AwareDateTime.is_native(datetime.datetime.now(datetime.timezone.utc)))
+    def test_is_native_true_sqlite(self):
+        self.assertTrue(AwareDateTime.is_native(datetime.datetime.fromisoformat('2000-01-01 00:00:00')))
+    def test_is_native_false_iso(self):
+        self.assertFalse(AwareDateTime.is_native(datetime.datetime.fromisoformat('2000-01-01T00:00:00+09:00')))
     def test_is_aware_true(self):
         self.assertTrue(AwareDateTime.is_aware(datetime.datetime.now(datetime.timezone.utc)))
     def test_is_aware_false(self):
         self.assertFalse(AwareDateTime.is_aware(datetime.datetime.now()))
     def test_to_utc_native(self):
         actual = AwareDateTime.to_utc(datetime.datetime.fromisoformat('2000-01-01T00:00:00'))
-        #actual = AwareDateTime.to_utc(datetime.datetime.now())
         if actual.tzinfo == datetime.timezone(datetime.timedelta(seconds=32400)):
             self.assertEqual(datetime.timezone.utc, actual.tzinfo)
             self.assertEqual("1999-12-31T15:00:00+0000", f"{actual:%Y-%m-%dT%H:%M:%S%z}")
@@ -29,7 +32,6 @@ class TestAwareDateTime(unittest.TestCase):
             self.assertEqual(12, actual.month)
             self.assertEqual(1999, actual.year)
     def test_to_utc_utc(self):
-        #actual = AwareDateTime.to_utc(datetime.datetime.now(datetime.timezone.utc))
         actual = AwareDateTime.to_utc(datetime.datetime.fromisoformat('2000-01-01T00:00:00+00:00'))
         self.assertEqual(datetime.timezone.utc, actual.tzinfo)
         self.assertEqual("2000-01-01T00:00:00+0000", f"{actual:%Y-%m-%dT%H:%M:%S%z}")
@@ -98,7 +100,6 @@ class TestAwareDateTime(unittest.TestCase):
             datetime.datetime.fromisoformat('2000-01-01T00:00:00'), 
             datetime.timezone(datetime.timedelta(seconds=32400)))
         if datetime.datetime.now().tzinfo == datetime.timezone(datetime.timedelta(seconds=32400)):
-            #self.assertEqual(datetime.timedelta(seconds=32400), actual.tzinfo)
             self.assertEqual(datetime.timezone(datetime.timedelta(seconds=32400), 'JST'), actual.tzinfo)
             self.assertEqual(datetime.timezone, type(actual.tzinfo))
             self.assertEqual(32400, actual.tzinfo.utcoffset(actual).seconds)
@@ -134,26 +135,6 @@ class TestAwareDateTime(unittest.TestCase):
         actual = AwareDateTime.if_native_to_tz(datetime.datetime.fromisoformat('2000-01-01T00:00:00+00:00'), datetime.timezone(datetime.timedelta(seconds=32400)))
         self.assertEqual(datetime.timezone.utc, actual.tzinfo)
         self.assertEqual("2000-01-01T00:00:00+0000", f"{actual:%Y-%m-%dT%H:%M:%S%z}")
-    def test_tz_sec_utc(self):
-        actual = AwareDateTime.tz_sec(datetime.datetime.fromisoformat('2000-01-01T00:00:00+00:00'))
-        self.assertEqual(0, actual)
-    def test_tz_sec_native(self):
-        actual = AwareDateTime.tz_sec(datetime.datetime.fromisoformat('2000-01-01T00:00:00'))
-        if datetime.datetime.now().tzinfo == datetime.timezone(datetime.timedelta(seconds=32400)):
-            self.assertEqual(32400, actual)
-    def test_tz_sec_tokyo(self):
-        actual = AwareDateTime.tz_sec(datetime.datetime.fromisoformat('2000-01-01T00:00:00+09:00'))
-        self.assertEqual(32400, actual)
-    def test_tz_iso_utc(self):
-        actual = AwareDateTime.tz_iso(datetime.datetime.fromisoformat('2000-01-01T00:00:00+00:00'))
-        self.assertEqual('+00:00', actual)
-    def test_tz_iso_native(self):
-        actual = AwareDateTime.tz_iso(datetime.datetime.fromisoformat('2000-01-01T00:00:00'))
-        if datetime.datetime.now().tzinfo == datetime.timezone(datetime.timedelta(seconds=32400)):
-            self.assertEqual('+09:00', actual)
-    def test_tz_iso_tokyo(self):
-        actual = AwareDateTime.tz_iso(datetime.datetime.fromisoformat('2000-01-01T00:00:00+09:00'))
-        self.assertEqual('+09:00', actual)
 
 
 if __name__ == '__main__':
